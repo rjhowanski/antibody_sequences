@@ -1,0 +1,52 @@
+#iRep_Vgene_Seq_Process, Author: Ray Howanski, Date: 2020-04-18
+
+#The iRep Vgene Sequence Processing Script is designed to recieve the post blast excel file and raw excel file processed from iRep data. It joings the post blast file and raw excel file based on the 'sort' of the antibodies. The script extracts the V gene variant and then calls the IMGT data to identify the DB sequence associated with the V gene variant. The DB sequence will be grabbed (first n number of characters based on: sample_start minus 1) and placed into the merged excel file in the new column "V_gene_sequence". It is possible multiple V_gene_sequences will be generated for the same V gene variant. A column with the header "Duplicate" indicates if there
+
+
+#import software libraries 
+import pandas as pd
+import numpy as np
+import xlrd
+from datetime import datetime
+now = datetime.now()
+timestamp = now.strftime("%Y_%m_%d_%H_%M_%S")
+
+#import screening data
+postblast = pd.read_excel(r'\\IMM-QBS1\Shares\Antibody\Utilities\BLASTforWindows\postblast_analysis\postblast_input\postblast_input.xlsx', skiprows=0, header=None)
+raw = pd.read_excel(r'\\IMM-QBS1\Shares\Antibody\Utilities\BLASTforWindows\postblast_analysis\raw_input\raw_input.xlsx')
+data = pd.read_excel(r'\\IMM-QBS1\Shares\Antibody\Utilities\BLASTforWindows\postblast_analysis\IMGT_database\IMGT all Excel file.xlsx', skiprows=0, header=None)
+
+#add sort column to raw file, starting at 1
+raw.insert(0, 'Sort', range(1, 1 + len(raw)))
+
+#give column titles to data sets
+data.columns = ['One','V_gene_variant','Three','Four','Five','Six','Seven','Eight',
+               'Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fiften','DB_sequence']
+
+postblast.columns= ['Name','V_Region','Identity','Total_Aligned','Number_Different','Insertions','Query_Starts',
+            'Germline_End', 'Sample_Starts','Sample_Ends_At','E_Value','Score_(Bits)']
+
+postblast['Number Aligned']= ""
+
+#merge raw and postblast based on the sort/name
+merged = raw.merge(postblast, left_on='Sort', right_on='Name')
+merged = merged.drop(['Name'], axis=1)
+
+# add v gene varaint by identifying vertical bars and grabbing text between bars
+merged['V_gene_variant'] = merged.V_Region.str.split(r'|').str[1]
+
+#add DB sequence to merged file based on V_gene_variant
+raw_plus_data_seq = pd.merge(merged,data[['V_gene_variant','DB_sequence']],on='V_gene_variant', how='left')
+raw_plus_data_seq['V_gene_sequence']=""
+
+
+#populate V gene sequence based on database
+raw_plus_data_seq['V_gene_sequence']= raw_plus_data_seq.apply(lambda x: x['DB_sequence'][: (int(x['Sample_Starts'])-1)], axis=1)
+
+#identify sequence duplicates
+raw_plus_data_seq['Duplicate'] = raw_plus_data_seq.duplicated(keep=False).map({True:'Yes', False:'No'})
+
+#export files for user
+raw_plus_data_seq.to_excel(r'\\IMM-QBS1\Shares\Antibody\Utilities\BLASTforWindows\postblast_analysis\outputs\seq_outputs\seq_output_' + timestamp + '.xlsx', index = True)
+raw.to_excel(r'\\IMM-QBS1\Shares\Antibody\Utilities\BLASTforWindows\postblast_analysis\outputs\original\raw_inputs\raw_input_' + timestamp + '.xlsx', index = True)
+postblast.to_excel(r'\\IMM-QBS1\Shares\Antibody\Utilities\BLASTforWindows\postblast_analysis\outputs\original\postblast_inputs\postblast_input_' + timestamp + '.xlsx', index = True)
